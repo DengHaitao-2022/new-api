@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -87,10 +89,61 @@ func TelegramLogin(c *gin.Context) {
 	}
 
 	telegramId := params["id"][0]
-	user := model.User{TelegramId: telegramId}
-	if err := user.FillUserByTelegramId(); err != nil {
-		c.JSON(200, gin.H{
-			"message": err.Error(),
+	user := model.User{
+		TelegramId: telegramId,
+	}
+	if model.IsTelegramIdAlreadyTaken(telegramId) {
+		if err := user.FillUserByTelegramId(); err != nil {
+			c.JSON(200, gin.H{
+				"message": err.Error(),
+				"success": false,
+			})
+			return
+		}
+		if user.Id == 0 {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "用户已注销",
+			})
+			return
+		}
+	} else {
+		if !common.RegisterEnabled {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "管理员关闭了新用户注册",
+			})
+			return
+		}
+		user.Username = "telegram_" + strconv.Itoa(model.GetMaxUserId()+1)
+		displayName := strings.TrimSpace(params.Get("first_name") + " " + params.Get("last_name"))
+		if displayName == "" {
+			displayName = strings.TrimSpace(params.Get("username"))
+		}
+		if displayName == "" {
+			displayName = "Telegram User"
+		}
+		user.DisplayName = displayName
+		user.Role = common.RoleCommonUser
+		user.Status = common.UserStatusEnabled
+
+		if common.RegistrationInviteRequired {
+			err := model.CreateUserWithRegistrationInvite(&user, 0, params.Get("invite_code"), "telegram")
+			if err != nil {
+				if handleRegistrationInviteError(c, err) {
+					return
+				}
+				common.ApiError(c, err)
+				return
+			}
+		} else if err := user.Insert(0); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	}
+	if user.Status != common.UserStatusEnabled {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "用户已被封禁",
 			"success": false,
 		})
 		return
@@ -104,6 +157,9 @@ func checkTelegramAuthorization(params map[string][]string, token string) bool {
 	for k, v := range params {
 		if k == "hash" {
 			hash = v[0]
+			continue
+		}
+		if k == "invite_code" {
 			continue
 		}
 		strs = append(strs, k+"="+v[0])

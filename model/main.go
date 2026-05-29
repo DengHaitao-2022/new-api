@@ -280,6 +280,8 @@ func migrateDB() error {
 		&SubscriptionPreConsumeRecord{},
 		&CustomOAuthProvider{},
 		&UserOAuthBinding{},
+		&RegistrationInvite{},
+		&RegistrationInviteUsage{},
 		&PerfMetric{},
 	)
 	if err != nil {
@@ -329,6 +331,8 @@ func migrateDBFast() error {
 		{&SubscriptionPreConsumeRecord{}, "SubscriptionPreConsumeRecord"},
 		{&CustomOAuthProvider{}, "CustomOAuthProvider"},
 		{&UserOAuthBinding{}, "UserOAuthBinding"},
+		{&RegistrationInvite{}, "RegistrationInvite"},
+		{&RegistrationInviteUsage{}, "RegistrationInviteUsage"},
 		{&PerfMetric{}, "PerfMetric"},
 	}
 	// 动态计算migration数量，确保errChan缓冲区足够大

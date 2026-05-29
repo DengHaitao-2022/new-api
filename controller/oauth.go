@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
@@ -26,6 +27,12 @@ func GenerateOAuthCode(c *gin.Context) {
 	affCode := c.Query("aff")
 	if affCode != "" {
 		session.Set("aff", affCode)
+	}
+	inviteCode := strings.TrimSpace(c.Query("invite_code"))
+	if inviteCode != "" {
+		session.Set("invite_code", inviteCode)
+	} else {
+		session.Delete("invite_code")
 	}
 	session.Set("oauth_state", state)
 	err := session.Save()
@@ -106,6 +113,9 @@ func HandleOAuth(c *gin.Context) {
 	// 7. Find or create user
 	user, err := findOrCreateOAuthUser(c, provider, oauthUser, session)
 	if err != nil {
+		if handleRegistrationInviteError(c, err) {
+			return
+		}
 		switch err.(type) {
 		case *OAuthUserDeletedError:
 			common.ApiErrorI18n(c, i18n.MsgOAuthUserDeleted)
@@ -236,6 +246,16 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 	if !common.RegisterEnabled {
 		return nil, &OAuthRegistrationDisabledError{}
 	}
+	registrationInviteCode := ""
+	if rawInviteCode := session.Get("invite_code"); rawInviteCode != nil {
+		if value, ok := rawInviteCode.(string); ok {
+			registrationInviteCode = strings.TrimSpace(value)
+		}
+	}
+	registrationMethod := strings.TrimSuffix(provider.GetProviderPrefix(), "_")
+	if registrationMethod == "" {
+		registrationMethod = provider.GetName()
+	}
 
 	// Set up new user
 	user.Username = provider.GetProviderPrefix() + strconv.Itoa(model.GetMaxUserId()+1)
@@ -273,6 +293,15 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 	if genericProvider, ok := provider.(*oauth.GenericOAuthProvider); ok {
 		// Custom provider: create user and binding in a transaction
 		err := model.DB.Transaction(func(tx *gorm.DB) error {
+			var registrationInvite *model.RegistrationInvite
+			if common.RegistrationInviteRequired {
+				invite, err := model.LockValidRegistrationInviteWithTx(tx, registrationInviteCode)
+				if err != nil {
+					return err
+				}
+				registrationInvite = invite
+			}
+
 			// Create user
 			if err := user.InsertWithTx(tx, inviterId); err != nil {
 				return err
@@ -288,6 +317,12 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 				return err
 			}
 
+			if common.RegistrationInviteRequired {
+				if err := model.UseRegistrationInviteWithTx(tx, registrationInvite, user.Id, registrationMethod); err != nil {
+					return err
+				}
+			}
+
 			return nil
 		})
 		if err != nil {
@@ -299,6 +334,15 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 	} else {
 		// Built-in provider: create user and update provider ID in a transaction
 		err := model.DB.Transaction(func(tx *gorm.DB) error {
+			var registrationInvite *model.RegistrationInvite
+			if common.RegistrationInviteRequired {
+				invite, err := model.LockValidRegistrationInviteWithTx(tx, registrationInviteCode)
+				if err != nil {
+					return err
+				}
+				registrationInvite = invite
+			}
+
 			// Create user
 			if err := user.InsertWithTx(tx, inviterId); err != nil {
 				return err
@@ -315,6 +359,12 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 				"telegram_id": user.TelegramId,
 			}).Error; err != nil {
 				return err
+			}
+
+			if common.RegistrationInviteRequired {
+				if err := model.UseRegistrationInviteWithTx(tx, registrationInvite, user.Id, registrationMethod); err != nil {
+					return err
+				}
 			}
 
 			return nil

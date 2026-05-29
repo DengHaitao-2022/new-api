@@ -58,6 +58,10 @@ import { OAuthProviders } from '@/features/auth/components/oauth-providers'
 import { loginFormSchema } from '@/features/auth/constants'
 import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
 import { useTurnstile } from '@/features/auth/hooks/use-turnstile'
+import {
+  getRegistrationInviteCode,
+  saveRegistrationInviteCode,
+} from '@/features/auth/lib/storage'
 import { beginPasskeyLogin, finishPasskeyLogin } from '@/features/auth/passkey'
 import type { AuthFormProps } from '@/features/auth/types'
 
@@ -125,6 +129,15 @@ export function UserAuthForm({
     detectPasskeySupport()
       .then(setPasskeySupported)
       .catch(() => setPasskeySupported(false))
+  }, [])
+
+  useEffect(() => {
+    const inviteCode = new URLSearchParams(window.location.search)
+      .get('invite_code')
+      ?.trim()
+    if (inviteCode) {
+      saveRegistrationInviteCode(inviteCode)
+    }
   }, [])
 
   const form = useForm<z.infer<typeof loginFormSchema>>({
@@ -206,7 +219,10 @@ export function UserAuthForm({
 
     setIsWeChatSubmitting(true)
     try {
-      const res = await wechatLoginByCode(wechatCode)
+      const res = await wechatLoginByCode(
+        wechatCode,
+        getRegistrationInviteCode()
+      )
       if (res?.success) {
         await handleLoginSuccess(res.data as { id?: number } | null, redirectTo)
         toast.success(t('Signed in via WeChat'))

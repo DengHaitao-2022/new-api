@@ -61,6 +61,20 @@ redemption.failed: "兑换失败，请稍后重试"
 redemption.not_provided: "未提供兑换码"
 redemption.expire_time_invalid: "过期时间不能早于当前时间"
 
+# Registration invite messages
+registration_invite.required: "请填写注册邀请码"
+registration_invite.not_found: "注册邀请码不存在"
+registration_invite.disabled: "注册邀请码已禁用"
+registration_invite.expired: "注册邀请码已过期"
+registration_invite.exhausted: "注册邀请码使用次数已达上限"
+registration_invite.code_invalid: "注册邀请码格式无效，仅支持 4-64 位字母、数字、短横线或下划线"
+registration_invite.remark_too_long: "备注不能超过 255 个字符"
+registration_invite.max_uses_invalid: "最大使用次数不能为负数"
+registration_invite.expire_time_invalid: "过期时间不能早于当前时间"
+registration_invite.count_positive: "邀请码个数必须大于 0"
+registration_invite.count_max: "一次最多生成 100 个邀请码"
+registration_invite.batch_with_custom_code: "批量生成时不能指定自定义邀请码"
+
 # User messages
 user.password_login_disabled: "管理员关闭了密码登录"
 user.register_disabled: "管理员关闭了新用户注册"

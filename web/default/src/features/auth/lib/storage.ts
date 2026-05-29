@@ -27,6 +27,7 @@ For commercial licensing, please contact support@quantumnous.com
 const STORAGE_KEYS = {
   USER_ID: 'uid',
   AFFILIATE: 'aff',
+  REGISTRATION_INVITE: 'invite_code',
   STATUS: 'status',
 } as const
 
@@ -102,5 +103,41 @@ export function saveAffiliateCode(code: string): void {
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('Failed to save affiliate code:', error)
+  }
+}
+
+// ============================================================================
+// Registration Invitation Code Storage
+// ============================================================================
+
+/**
+ * Get registration invitation code from localStorage
+ */
+export function getRegistrationInviteCode(): string {
+  if (typeof window === 'undefined') return ''
+  try {
+    return window.localStorage.getItem(STORAGE_KEYS.REGISTRATION_INVITE) ?? ''
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to get registration invitation code:', error)
+    return ''
+  }
+}
+
+/**
+ * Save registration invitation code to localStorage
+ */
+export function saveRegistrationInviteCode(code: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    const normalized = code.trim()
+    if (normalized) {
+      window.localStorage.setItem(STORAGE_KEYS.REGISTRATION_INVITE, normalized)
+    } else {
+      window.localStorage.removeItem(STORAGE_KEYS.REGISTRATION_INVITE)
+    }
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('Failed to save registration invitation code:', error)
   }
 }
