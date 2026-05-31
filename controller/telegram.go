@@ -136,6 +136,7 @@ func TelegramLogin(c *gin.Context) {
 				common.ApiError(c, err)
 				return
 			}
+			user.FinalizeUserCreation(0)
 		} else if err := user.Insert(0); err != nil {
 			common.ApiError(c, err)
 			return

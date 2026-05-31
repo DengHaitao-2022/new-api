@@ -84,6 +84,29 @@ func TestUseRegistrationInviteWithTxRecordsUsage(t *testing.T) {
 	assert.ErrorIs(t, lockRegistrationInviteForTest(invite.Code), ErrRegistrationInviteExhausted)
 }
 
+func TestUseRegistrationInviteWithTxRejectsAlreadyExhaustedInvite(t *testing.T) {
+	truncateTables(t)
+
+	invite := createRegistrationInviteForTest(t, RegistrationInvite{
+		Code:      "INVITE_STALE_EXHAUSTED",
+		MaxUses:   1,
+		UsedCount: 1,
+	})
+
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		return UseRegistrationInviteWithTx(tx, &invite, 44, "password")
+	})
+	require.ErrorIs(t, err, ErrRegistrationInviteExhausted)
+
+	var reloaded RegistrationInvite
+	require.NoError(t, DB.First(&reloaded, invite.Id).Error)
+	assert.Equal(t, 1, reloaded.UsedCount)
+
+	var usageCount int64
+	require.NoError(t, DB.Model(&RegistrationInviteUsage{}).Where("registration_invite_id = ?", invite.Id).Count(&usageCount).Error)
+	assert.Zero(t, usageCount)
+}
+
 func TestRegistrationInviteZeroMaxUsesIsUnlimited(t *testing.T) {
 	truncateTables(t)
 
@@ -105,6 +128,22 @@ func TestRegistrationInviteZeroMaxUsesIsUnlimited(t *testing.T) {
 	var reloaded RegistrationInvite
 	require.NoError(t, DB.First(&reloaded, invite.Id).Error)
 	assert.Equal(t, 101, reloaded.UsedCount)
+}
+
+func TestCreateRegistrationInvitesRollsBackBatchOnFailure(t *testing.T) {
+	truncateTables(t)
+
+	codes, err := CreateRegistrationInvites(RegistrationInvite{
+		Code:    "INVITE_DUPLICATE_BATCH",
+		Count:   2,
+		MaxUses: 5,
+	})
+	require.Error(t, err)
+	assert.Nil(t, codes)
+
+	var count int64
+	require.NoError(t, DB.Model(&RegistrationInvite{}).Where("code = ?", "INVITE_DUPLICATE_BATCH").Count(&count).Error)
+	assert.Zero(t, count)
 }
 
 func TestCreateUserWithRegistrationInviteCreatesUserAndConsumesInvite(t *testing.T) {

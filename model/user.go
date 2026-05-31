@@ -462,9 +462,9 @@ func (user *User) InsertWithTx(tx *gorm.DB, inviterId int) error {
 	return nil
 }
 
-// FinalizeOAuthUserCreation performs post-transaction tasks for OAuth user creation.
-// This should be called after the transaction commits successfully.
-func (user *User) FinalizeOAuthUserCreation(inviterId int) {
+// FinalizeUserCreation performs post-transaction tasks for user creation.
+// This should be called after a transactional insert commits successfully.
+func (user *User) FinalizeUserCreation(inviterId int) {
 	// 用户创建成功后，根据角色初始化边栏配置
 	var createdUser User
 	if err := DB.Where("id = ?", user.Id).First(&createdUser).Error; err == nil {
@@ -491,6 +491,12 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 			_ = inviteUser(inviterId)
 		}
 	}
+}
+
+// FinalizeOAuthUserCreation preserves the existing OAuth call sites while using
+// the shared user creation finalization logic.
+func (user *User) FinalizeOAuthUserCreation(inviterId int) {
+	user.FinalizeUserCreation(inviterId)
 }
 
 func (user *User) Update(updatePassword bool) error {

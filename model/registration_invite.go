@@ -49,13 +49,17 @@ func NormalizeRegistrationInviteCode(code string) string {
 }
 
 func GenerateRegistrationInviteCode() (string, error) {
+	return GenerateRegistrationInviteCodeWithTx(DB)
+}
+
+func GenerateRegistrationInviteCodeWithTx(tx *gorm.DB) (string, error) {
 	for i := 0; i < 8; i++ {
 		code, err := common.GenerateRandomCharsKey(RegistrationInviteCodeLength)
 		if err != nil {
 			return "", err
 		}
 		var count int64
-		if err := DB.Model(&RegistrationInvite{}).Where("code = ?", code).Count(&count).Error; err != nil {
+		if err := tx.Model(&RegistrationInvite{}).Where("code = ?", code).Count(&count).Error; err != nil {
 			return "", err
 		}
 		if count == 0 {
@@ -120,8 +124,19 @@ func UseRegistrationInviteWithTx(tx *gorm.DB, invite *RegistrationInvite, userId
 		registrationMethod = "unknown"
 	}
 
-	if err := tx.Model(invite).Update("used_count", gorm.Expr("used_count + ?", 1)).Error; err != nil {
-		return err
+	now := common.GetTimestamp()
+	query := tx.Model(&RegistrationInvite{}).
+		Where("id = ?", invite.Id).
+		Where("status = ?", common.RegistrationInviteStatusEnabled).
+		Where("(expires_at = ? OR expires_at >= ?)", 0, now).
+		Where("(max_uses = ? OR used_count < max_uses)", 0)
+
+	result := query.Update("used_count", gorm.Expr("used_count + ?", 1))
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrRegistrationInviteExhausted
 	}
 
 	usage := &RegistrationInviteUsage{
@@ -177,6 +192,58 @@ func GetRegistrationInviteUsages(inviteId int, startIdx int, num int) (usages []
 	return usages, total, err
 }
 
+func CreateRegistrationInvites(template RegistrationInvite) ([]string, error) {
+	template.Code = NormalizeRegistrationInviteCode(template.Code)
+	if template.Status == 0 {
+		template.Status = common.RegistrationInviteStatusEnabled
+	}
+
+	codes := make([]string, 0, template.Count)
+	seenCodes := make(map[string]struct{}, template.Count)
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		for i := 0; i < template.Count; i++ {
+			code := template.Code
+			if code == "" {
+				generatedCode := ""
+				for attempt := 0; attempt < 16; attempt++ {
+					generated, err := GenerateRegistrationInviteCodeWithTx(tx)
+					if err != nil {
+						return err
+					}
+					if _, exists := seenCodes[generated]; exists {
+						continue
+					}
+					generatedCode = generated
+					break
+				}
+				if generatedCode == "" {
+					return errors.New("failed to generate unique registration invite code")
+				}
+				code = generatedCode
+			}
+
+			cleanInvite := RegistrationInvite{
+				Code:      code,
+				Remark:    template.Remark,
+				Status:    template.Status,
+				MaxUses:   template.MaxUses,
+				ExpiresAt: template.ExpiresAt,
+				CreatedBy: template.CreatedBy,
+			}
+			if err := tx.Create(&cleanInvite).Error; err != nil {
+				return err
+			}
+			codes = append(codes, code)
+			seenCodes[code] = struct{}{}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return codes, nil
+}
+
 func (invite *RegistrationInvite) Insert() error {
 	invite.Code = NormalizeRegistrationInviteCode(invite.Code)
 	if invite.Status == 0 {
@@ -215,7 +282,7 @@ func DeleteInvalidRegistrationInvites() (int64, error) {
 }
 
 func CreateUserWithRegistrationInvite(user *User, inviterId int, inviteCode string, registrationMethod string) error {
-	err := DB.Transaction(func(tx *gorm.DB) error {
+	return DB.Transaction(func(tx *gorm.DB) error {
 		invite, err := LockValidRegistrationInviteWithTx(tx, inviteCode)
 		if err != nil {
 			return err
@@ -225,12 +292,6 @@ func CreateUserWithRegistrationInvite(user *User, inviterId int, inviteCode stri
 		}
 		return UseRegistrationInviteWithTx(tx, invite, user.Id, registrationMethod)
 	})
-	if err != nil {
-		return err
-	}
-
-	user.FinalizeOAuthUserCreation(inviterId)
-	return nil
 }
 
 func RegistrationInviteStatusLabel(status int) string {

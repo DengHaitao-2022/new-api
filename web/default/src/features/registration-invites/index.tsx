@@ -801,9 +801,15 @@ function RegistrationInviteDrawer(props: {
       form.reset(getInviteFormDefaults())
       return
     }
+    let active = true
     getRegistrationInvite(props.invite.id).then((result) => {
-      form.reset(getInviteFormDefaults(result.data ?? props.invite))
+      if (active) {
+        form.reset(getInviteFormDefaults(result.data ?? props.invite))
+      }
     })
+    return () => {
+      active = false
+    }
   }, [form, isUpdate, props.invite, props.open])
 
   const onSubmit = async (data: InviteFormValues) => {

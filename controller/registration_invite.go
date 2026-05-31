@@ -146,33 +146,14 @@ func AddRegistrationInvite(c *gin.Context) {
 		return
 	}
 
-	codes := make([]string, 0, invite.Count)
-	for i := 0; i < invite.Count; i++ {
-		code := invite.Code
-		if code == "" {
-			generated, err := model.GenerateRegistrationInviteCode()
-			if err != nil {
-				common.ApiError(c, err)
-				return
-			}
-			code = generated
-		}
-		cleanInvite := model.RegistrationInvite{
-			Code:      code,
-			Remark:    invite.Remark,
-			Status:    common.RegistrationInviteStatusEnabled,
-			MaxUses:   invite.MaxUses,
-			ExpiresAt: invite.ExpiresAt,
-			CreatedBy: c.GetInt("id"),
-		}
-		if invite.Status != 0 {
-			cleanInvite.Status = invite.Status
-		}
-		if err := cleanInvite.Insert(); err != nil {
-			common.ApiError(c, err)
-			return
-		}
-		codes = append(codes, code)
+	if invite.Status == 0 {
+		invite.Status = common.RegistrationInviteStatusEnabled
+	}
+	invite.CreatedBy = c.GetInt("id")
+	codes, err := model.CreateRegistrationInvites(invite)
+	if err != nil {
+		common.ApiError(c, err)
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{

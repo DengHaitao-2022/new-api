@@ -111,6 +111,9 @@ func WeChatAuth(c *gin.Context) {
 				})
 				return
 			}
+			if common.RegistrationInviteRequired {
+				user.FinalizeUserCreation(0)
+			}
 		} else {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
