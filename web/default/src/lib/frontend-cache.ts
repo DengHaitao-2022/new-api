@@ -24,6 +24,7 @@ const PRESERVED_LOCAL_STORAGE_KEYS = new Set([
   'user',
   'uid',
   'aff',
+  'invite_code',
   'oauth:binding:result',
 ])
 

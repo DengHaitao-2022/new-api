@@ -47,6 +47,7 @@ const basicAuthSchema = z.object({
   PasswordRegisterEnabled: z.boolean(),
   EmailVerificationEnabled: z.boolean(),
   RegisterEnabled: z.boolean(),
+  RegistrationInviteRequired: z.boolean(),
   EmailDomainRestrictionEnabled: z.boolean(),
   EmailAliasRestrictionEnabled: z.boolean(),
   EmailDomainWhitelist: z.string(),
@@ -184,6 +185,29 @@ export function BasicAuthSection({ defaultValues }: BasicAuthSectionProps) {
                   <FormLabel>{t('Email Verification')}</FormLabel>
                   <FormDescription>
                     {t('Require email verification for new accounts')}
+                  </FormDescription>
+                </SettingsSwitchContent>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </SettingsSwitchItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='RegistrationInviteRequired'
+            render={({ field }) => (
+              <SettingsSwitchItem>
+                <SettingsSwitchContent>
+                  <FormLabel>{t('Require Invitation Code')}</FormLabel>
+                  <FormDescription>
+                    {t(
+                      'Require a valid registration invitation code for new password and OAuth accounts'
+                    )}
                   </FormDescription>
                 </SettingsSwitchContent>
                 <FormControl>

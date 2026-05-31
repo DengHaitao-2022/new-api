@@ -61,6 +61,20 @@ redemption.failed: "兌換失敗，請稍後重試"
 redemption.not_provided: "未提供兌換碼"
 redemption.expire_time_invalid: "過期時間不能早於當前時間"
 
+# Registration invite messages
+registration_invite.required: "請填寫註冊邀請碼"
+registration_invite.not_found: "註冊邀請碼不存在"
+registration_invite.disabled: "註冊邀請碼已禁用"
+registration_invite.expired: "註冊邀請碼已過期"
+registration_invite.exhausted: "註冊邀請碼使用次數已達上限"
+registration_invite.code_invalid: "註冊邀請碼格式無效，僅支援 4-64 位字母、數字、短橫線或底線"
+registration_invite.remark_too_long: "備註不能超過 255 個字元"
+registration_invite.max_uses_invalid: "最大使用次數不能為負數"
+registration_invite.expire_time_invalid: "過期時間不能早於當前時間"
+registration_invite.count_positive: "邀請碼個數必須大於 0"
+registration_invite.count_max: "一次最多生成 100 個邀請碼"
+registration_invite.batch_with_custom_code: "批量生成時不能指定自訂邀請碼"
+
 # User messages
 user.password_login_disabled: "管理員關閉了密碼登錄"
 user.register_disabled: "管理員關閉了新使用者註冊"

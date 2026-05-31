@@ -29,6 +29,7 @@ import {
   Radio,
   Settings,
   Ticket,
+  TicketCheck,
   User,
   Users,
   Wallet,
@@ -135,6 +136,11 @@ export function useSidebarData(): SidebarData {
             title: t('Redemption Codes'),
             url: '/redemption-codes',
             icon: Ticket,
+          },
+          {
+            title: t('Registration Invitation Codes'),
+            url: '/registration-invites',
+            icon: TicketCheck,
           },
           {
             title: t('Subscription Management'),

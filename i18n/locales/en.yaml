@@ -60,6 +60,20 @@ redemption.failed: "Redemption failed, please try again later"
 redemption.not_provided: "Redemption code not provided"
 redemption.expire_time_invalid: "Expiration time cannot be earlier than current time"
 
+# Registration invite messages
+registration_invite.required: "Please enter the registration invitation code"
+registration_invite.not_found: "Registration invitation code does not exist"
+registration_invite.disabled: "Registration invitation code is disabled"
+registration_invite.expired: "Registration invitation code has expired"
+registration_invite.exhausted: "Registration invitation code usage limit has been reached"
+registration_invite.code_invalid: "Invalid registration invitation code format, only 4-64 letters, numbers, hyphens, or underscores are supported"
+registration_invite.remark_too_long: "Remark cannot exceed 255 characters"
+registration_invite.max_uses_invalid: "Maximum uses cannot be negative"
+registration_invite.expire_time_invalid: "Expiration time cannot be earlier than current time"
+registration_invite.count_positive: "Invitation code count must be greater than 0"
+registration_invite.count_max: "Maximum 100 invitation codes can be generated at once"
+registration_invite.batch_with_custom_code: "Custom invitation code cannot be used for batch generation"
+
 # User messages
 user.password_login_disabled: "Password login has been disabled by administrator"
 user.register_disabled: "New user registration has been disabled by administrator"

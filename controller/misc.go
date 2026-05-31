@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -88,6 +87,7 @@ func GetStatus(c *gin.Context) {
 		"demo_site_enabled":             operation_setting.DemoSiteEnabled,
 		"self_use_mode_enabled":         operation_setting.SelfUseModeEnabled,
 		"register_enabled":              common.RegisterEnabled,
+		"registration_invite_required":  common.RegistrationInviteRequired,
 		"password_login_enabled":        common.PasswordLoginEnabled,
 		"password_register_enabled":     common.PasswordRegisterEnabled,
 		"default_use_auto_group":        setting.DefaultUseAutoGroup,
@@ -338,7 +338,7 @@ type PasswordResetRequest struct {
 
 func ResetPassword(c *gin.Context) {
 	var req PasswordResetRequest
-	err := json.NewDecoder(c.Request.Body).Decode(&req)
+	err := common.DecodeJson(c.Request.Body, &req)
 	if req.Email == "" || req.Token == "" {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,

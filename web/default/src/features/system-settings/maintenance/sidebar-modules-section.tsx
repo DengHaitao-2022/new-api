@@ -138,6 +138,10 @@ export function SidebarModulesSection({
         title: t('Redeem codes'),
         description: t('Create and review invite or credit codes.'),
       },
+      registration_invite: {
+        title: t('Registration Invitation Codes'),
+        description: t('Manage registration-only invitation codes.'),
+      },
       user: {
         title: t('Users'),
         description: t('Administer user accounts and roles.'),
