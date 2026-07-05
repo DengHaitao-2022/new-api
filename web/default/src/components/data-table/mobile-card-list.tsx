@@ -48,12 +48,27 @@ interface MobileColumnMeta {
   mobileTitle?: boolean
   mobileBadge?: boolean
   mobileHidden?: boolean
+  mobileOrder?: number
 }
 
 function getCellMeta<TData>(
   cell: Cell<TData, unknown>
 ): MobileColumnMeta | undefined {
   return cell.column.columnDef.meta as MobileColumnMeta | undefined
+}
+
+function orderCardCells<TData>(
+  cells: Cell<TData, unknown>[]
+): Cell<TData, unknown>[] {
+  return [...cells].sort((a, b) => {
+    const aOrder = getCellMeta(a)?.mobileOrder
+    const bOrder = getCellMeta(b)?.mobileOrder
+
+    if (aOrder == null && bOrder == null) return 0
+    if (aOrder == null) return 1
+    if (bOrder == null) return -1
+    return aOrder - bOrder
+  })
 }
 
 function getCellLabel<TData>(cell: Cell<TData, unknown>): string | null {
@@ -132,12 +147,14 @@ function CompactRow<TData>({ row }: { row: Row<TData> }) {
   const badgeCell = allCells.find((c) => getCellMeta(c)?.mobileBadge)
   const actionsCell = allCells.find((c) => c.column.id === 'actions')
 
-  const fieldCells = allCells.filter(
-    (c) =>
-      c !== titleCell &&
-      c !== badgeCell &&
-      c !== actionsCell &&
-      !getCellMeta(c)?.mobileHidden
+  const fieldCells = orderCardCells(
+    allCells.filter(
+      (c) =>
+        c !== titleCell &&
+        c !== badgeCell &&
+        c !== actionsCell &&
+        !getCellMeta(c)?.mobileHidden
+    )
   )
 
   return (
@@ -195,8 +212,10 @@ function FallbackRow<TData>({ row }: { row: Row<TData> }) {
     .filter((cell) => cell.column.id !== 'select')
 
   const actionsCell = allCells.find((c) => c.column.id === 'actions')
-  const contentCells = allCells.filter(
-    (c) => c.column.id !== 'actions' && !getCellMeta(c)?.mobileHidden
+  const contentCells = orderCardCells(
+    allCells.filter(
+      (c) => c.column.id !== 'actions' && !getCellMeta(c)?.mobileHidden
+    )
   )
 
   return (
@@ -246,6 +265,7 @@ function FallbackRow<TData>({ row }: { row: Row<TData> }) {
  * - `mobileTitle`  — card header (left, larger text)
  * - `mobileBadge`  — inline with title (right, e.g. status badge)
  * - `mobileHidden` — hidden on mobile
+ * - `mobileOrder`  — lower values appear first in mobile field rows
  *
  * When mobileTitle or mobileBadge is set on any column, uses a structured
  * two-tier layout: title+badge header, then 2 key fields side-by-side.
