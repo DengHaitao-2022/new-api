@@ -7,7 +7,6 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 const RegistrationInviteCodeLength = 18
@@ -89,13 +88,8 @@ func LockValidRegistrationInviteWithTx(tx *gorm.DB, code string) (*RegistrationI
 		return nil, ErrRegistrationInviteRequired
 	}
 
-	query := tx.Where("code = ?", code)
-	if !common.UsingSQLite {
-		query = query.Clauses(clause.Locking{Strength: "UPDATE"})
-	}
-
 	invite := &RegistrationInvite{}
-	if err := query.First(invite).Error; err != nil {
+	if err := lockForUpdate(tx).Where("code = ?", code).First(invite).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrRegistrationInviteNotFound
 		}
