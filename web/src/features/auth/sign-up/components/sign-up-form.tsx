@@ -47,12 +47,9 @@ import { useEmailVerification } from '@/features/auth/hooks/use-email-verificati
 import { useTurnstile } from '@/features/auth/hooks/use-turnstile'
 import {
   getAffiliateCode,
-  getRegistrationInviteCode,
   saveAffiliateCode,
-  saveRegistrationInviteCode,
 } from '@/features/auth/lib/storage'
 import { useStatus } from '@/hooks/use-status'
-import { isAuthBundle } from '@/lib/api'
 import { getServerErrorMessageKey } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 
@@ -78,7 +75,7 @@ export function SignUpForm({
     setTurnstileToken,
     validateTurnstile,
   } = useTurnstile()
-  const { redirectToLogin, handleLoginSuccess } = useAuthRedirect()
+  const { redirectToLogin, handleLoginResult } = useAuthRedirect()
   const {
     isSending: isSendingCode,
     secondsLeft,
@@ -94,19 +91,13 @@ export function SignUpForm({
     defaultValues: {
       username: '',
       email: '',
-      inviteCode: getRegistrationInviteCode(),
       password: '',
       confirmPassword: '',
     },
   })
 
   const emailValue = form.watch('email')
-  const inviteCodeValue = form.watch('inviteCode') ?? ''
   const emailVerificationRequired = !!status?.email_verification
-  const registrationInviteRequired = Boolean(
-    status?.registration_invite_required ??
-    status?.data?.registration_invite_required
-  )
   const hasUserAgreement = Boolean(status?.user_agreement_enabled)
   const hasPrivacyPolicy = Boolean(status?.privacy_policy_enabled)
   const requiresLegalConsent = hasUserAgreement || hasPrivacyPolicy
@@ -116,8 +107,6 @@ export function SignUpForm({
     true
   const hasWeChatLogin = Boolean(status?.wechat_login)
   const turnstileReady = !isTurnstileEnabled || Boolean(turnstileToken)
-  const inviteReady =
-    !registrationInviteRequired || Boolean(inviteCodeValue.trim())
 
   const wechatQrCodeUrl = useMemo(() => {
     return (
@@ -146,25 +135,9 @@ export function SignUpForm({
     if (aff) {
       saveAffiliateCode(aff)
     }
-    const inviteCode = new URLSearchParams(window.location.search)
-      .get('invite_code')
-      ?.trim()
-    if (inviteCode) {
-      form.setValue('inviteCode', inviteCode)
-      saveRegistrationInviteCode(inviteCode)
-    }
-  }, [form])
-
-  useEffect(() => {
-    saveRegistrationInviteCode(inviteCodeValue)
-  }, [inviteCodeValue])
+  }, [])
 
   async function onSubmit(data: z.infer<typeof registerFormSchema>) {
-    const inviteCode = data.inviteCode?.trim() ?? ''
-    if (registrationInviteRequired && !inviteCode) {
-      toast.error(t('Please enter the registration invitation code'))
-      return
-    }
     if (requiresLegalConsent && !agreedToLegal) {
       toast.error(legalConsentErrorMessage)
       return
@@ -192,7 +165,6 @@ export function SignUpForm({
         email: data.email || undefined,
         verification_code: verificationCode || undefined,
         aff_code: getAffiliateCode(),
-        invite_code: inviteCode || undefined,
         turnstile: turnstileToken,
       })
 
@@ -217,10 +189,6 @@ export function SignUpForm({
   }
 
   const handleOpenWeChatDialog = () => {
-    if (registrationInviteRequired && !inviteCodeValue.trim()) {
-      toast.error(t('Please enter the registration invitation code'))
-      return
-    }
     if (requiresLegalConsent && !agreedToLegal) {
       toast.error(legalConsentErrorMessage)
       return
@@ -245,11 +213,12 @@ export function SignUpForm({
 
     setIsWeChatSubmitting(true)
     try {
-      const res = await wechatLoginByCode(wechatCode, inviteCodeValue)
-      if (res?.success && isAuthBundle(res.data)) {
-        await handleLoginSuccess(res.data)
-        toast.success(t('Signed in via WeChat'))
+      const res = await wechatLoginByCode(wechatCode)
+      if (res?.success) {
         handleWeChatDialogChange(false)
+        if (await handleLoginResult(res.data)) {
+          toast.success(t('Signed in via WeChat'))
+        }
       } else {
         if (getServerErrorMessageKey(res)) return
         toast.error(res?.message || t('Login failed'))
@@ -302,7 +271,7 @@ export function SignUpForm({
               <FormLabel>{t('Password')}</FormLabel>
               <FormControl>
                 <PasswordInput
-                  placeholder={t('Enter password (8-20 characters)')}
+                  placeholder={t('Enter password (8–128 characters)')}
                   {...field}
                 />
               </FormControl>
@@ -377,26 +346,6 @@ export function SignUpForm({
           </>
         )}
 
-        {registrationInviteRequired && (
-          <FormField
-            control={form.control}
-            name='inviteCode'
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t('Registration Invitation Code')}</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder={t('Enter registration invitation code')}
-                    autoComplete='one-time-code'
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        )}
-
         {/* Turnstile */}
         {isTurnstileEnabled && (
           <div className='mt-2'>
@@ -422,8 +371,7 @@ export function SignUpForm({
           disabled={
             isLoading ||
             (requiresLegalConsent && !agreedToLegal) ||
-            !turnstileReady ||
-            !inviteReady
+            !turnstileReady
           }
         >
           {isLoading ? <Loader2 className='h-4 w-4 animate-spin' /> : null}
@@ -433,11 +381,7 @@ export function SignUpForm({
         {oauthRegisterEnabled && (
           <OAuthProviders
             status={status}
-            disabled={
-              isLoading ||
-              (requiresLegalConsent && !agreedToLegal) ||
-              !inviteReady
-            }
+            disabled={isLoading || (requiresLegalConsent && !agreedToLegal)}
             onWeChatLogin={hasWeChatLogin ? handleOpenWeChatDialog : undefined}
             isWeChatLoading={isWeChatSubmitting}
             className='pt-2'
