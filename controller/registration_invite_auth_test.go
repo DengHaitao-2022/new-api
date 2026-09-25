@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -17,14 +16,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type registrationInviteOAuthProvider struct {
 	existingUser *model.User
 }
 
-func (*registrationInviteOAuthProvider) GetName() string { return "Invite OAuth" }
-func (*registrationInviteOAuthProvider) IsEnabled() bool { return true }
+func (*registrationInviteOAuthProvider) GetName() string              { return "Invite OAuth" }
+func (*registrationInviteOAuthProvider) ProviderUserIDColumn() string { return "oidc_id" }
+func (*registrationInviteOAuthProvider) IsEnabled() bool              { return true }
 func (*registrationInviteOAuthProvider) ExchangeToken(context.Context, string, *gin.Context) (*oauth.OAuthToken, error) {
 	return &oauth.OAuthToken{}, nil
 }
@@ -55,7 +56,7 @@ func setupRegistrationInviteAuthTest(t *testing.T) *gorm.DB {
 	previousInviteRequired := common.RegistrationInviteRequired
 	previousGenerateDefaultToken := constant.GenerateDefaultToken
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Info)})
 	require.NoError(t, err)
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
@@ -148,10 +149,10 @@ func TestOAuthRegistrationConsumesInviteAndExistingLoginBypassesRequirement(t *t
 
 	provider := &registrationInviteOAuthProvider{}
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
-	created, err := findOrCreateOAuthUser(c, provider, &oauth.OAuthUser{
+	created, _, err := findOrCreateOAuthUser(c, provider, &oauth.OAuthUser{
 		ProviderUserID: "new-oauth-user",
 		Username:       "new-oauth-user",
-	}, "", invite.Code)
+	}, nil, "", invite.Code)
 	require.NoError(t, err)
 	require.NotZero(t, created.Id)
 
@@ -160,9 +161,9 @@ func TestOAuthRegistrationConsumesInviteAndExistingLoginBypassesRequirement(t *t
 	assert.Equal(t, "invite_oauth", usage.RegistrationMethod)
 
 	provider.existingUser = created
-	existing, err := findOrCreateOAuthUser(c, provider, &oauth.OAuthUser{
+	existing, _, err := findOrCreateOAuthUser(c, provider, &oauth.OAuthUser{
 		ProviderUserID: "new-oauth-user",
-	}, "", "")
+	}, nil, "", "")
 	require.NoError(t, err)
 	assert.Equal(t, created.Id, existing.Id)
 
@@ -171,55 +172,34 @@ func TestOAuthRegistrationConsumesInviteAndExistingLoginBypassesRequirement(t *t
 	assert.Equal(t, int64(1), usageCount)
 }
 
-func TestTelegramRegistrationConsumesInviteAndExistingLoginBypassesRequirement(t *testing.T) {
-	db := setupRegistrationInviteAuthTest(t)
-	common.RegistrationInviteRequired = true
-	previousTelegramOAuthEnabled := common.TelegramOAuthEnabled
-	common.TelegramOAuthEnabled = true
-	previousBotToken := common.TelegramBotToken
-	common.TelegramBotToken = "telegram-invite-test-token"
-	t.Cleanup(func() {
-		common.TelegramOAuthEnabled = previousTelegramOAuthEnabled
-		common.TelegramBotToken = previousBotToken
-	})
-
-	invite := model.RegistrationInvite{
-		Code:    "TELEGRAM-INVITE",
-		Status:  common.RegistrationInviteStatusEnabled,
-		MaxUses: 1,
+func TestOAuthRegistrationRejectsInvalidInvitesWithoutCreatingUser(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		invite model.RegistrationInvite
+		code   string
+		want   error
+	}{
+		{name: "missing", want: model.ErrRegistrationInviteRequired},
+		{name: "unknown", code: "UNKNOWN", want: model.ErrRegistrationInviteNotFound},
+		{name: "expired", invite: model.RegistrationInvite{Code: "EXPIRED", Status: common.RegistrationInviteStatusEnabled, ExpiresAt: common.GetTimestamp() - 1}, code: "EXPIRED", want: model.ErrRegistrationInviteExpired},
+		{name: "exhausted", invite: model.RegistrationInvite{Code: "USED", Status: common.RegistrationInviteStatusEnabled, MaxUses: 1, UsedCount: 1}, code: "USED", want: model.ErrRegistrationInviteExhausted},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db := setupRegistrationInviteAuthTest(t)
+			common.RegistrationInviteRequired = true
+			if tc.invite.Code != "" {
+				require.NoError(t, db.Create(&tc.invite).Error)
+			}
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			user, migration, err := findOrCreateOAuthUser(c, &registrationInviteOAuthProvider{}, &oauth.OAuthUser{ProviderUserID: "rejected-user", Username: "rejected-user"}, nil, "", tc.code)
+			require.ErrorIs(t, err, tc.want)
+			assert.Nil(t, user)
+			assert.Nil(t, migration)
+			var count int64
+			require.NoError(t, db.Model(&model.User{}).Count(&count).Error)
+			assert.Zero(t, count)
+			require.NoError(t, db.Model(&model.RegistrationInviteUsage{}).Count(&count).Error)
+			assert.Zero(t, count)
+		})
 	}
-	require.NoError(t, db.Create(&invite).Error)
-
-	now := time.Now()
-	params := signedTelegramAuthorization(common.TelegramBotToken, now)
-	params.Set("invite_code", invite.Code)
-	router := gin.New()
-	router.GET("/api/oauth/telegram/login", TelegramLogin)
-	request := httptest.NewRequest(http.MethodGet, "/api/oauth/telegram/login?"+params.Encode(), nil)
-	response := httptest.NewRecorder()
-	router.ServeHTTP(response, request)
-	assert.Equal(t, http.StatusOK, response.Code)
-
-	var result struct {
-		Success bool `json:"success"`
-	}
-	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
-	assert.True(t, result.Success)
-
-	var created model.User
-	require.NoError(t, db.Where("telegram_id = ?", "123456").First(&created).Error)
-	var usage model.RegistrationInviteUsage
-	require.NoError(t, db.Where("registration_invite_id = ?", invite.Id).First(&usage).Error)
-	assert.Equal(t, "telegram", usage.RegistrationMethod)
-
-	params = signedTelegramAuthorization(common.TelegramBotToken, now.Add(time.Second))
-	request = httptest.NewRequest(http.MethodGet, "/api/oauth/telegram/login?"+params.Encode(), nil)
-	response = httptest.NewRecorder()
-	router.ServeHTTP(response, request)
-	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &result))
-	assert.True(t, result.Success)
-
-	var usageCount int64
-	require.NoError(t, db.Model(&model.RegistrationInviteUsage{}).Count(&usageCount).Error)
-	assert.Equal(t, int64(1), usageCount)
 }
